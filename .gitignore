@@ -1,0 +1,14 @@
+# Misc
+
+/build
+/install
+/log
+*/build
+*/install
+*/log
+*/.vscode
+
+
+python/clean.sh
+
+.vscode/
