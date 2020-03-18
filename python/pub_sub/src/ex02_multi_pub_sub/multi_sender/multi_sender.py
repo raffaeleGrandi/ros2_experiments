@@ -105,7 +105,7 @@ class Sender(Ros2Node):
         self._sys_pub = self.create_publisher(StringMsg, Constants.Comms.SYS_TOPIC, qos_profile=self._qos_depth)
 
         for ch_id in range(num_channels):
-            self._create_channel(ch_id)
+            self._create_channel(f"{ch_id:0>3}")
 
 
     def _create_channel(self, ch_id):

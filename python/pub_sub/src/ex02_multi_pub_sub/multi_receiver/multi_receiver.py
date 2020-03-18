@@ -85,7 +85,7 @@ class Receiver(Ros2Node):
                             callback_group=Reentrant())
 
         for ch_id in range(num_channels):
-            self._create_channel(ch_id)
+            self._create_channel(f"{ch_id:0>3}")
 
 
     def _create_channel(self, ch_id):
