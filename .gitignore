@@ -7,14 +7,10 @@
 */install
 */log
 */.vscode
-
-
-python/clean.sh
-
 .vscode/
 
+python/clean.sh
 python/pub_sub/build/
-
 python/pub_sub/install/
-
 python/pub_sub/log/
+python/pub_sub/src/#stack/
