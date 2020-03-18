@@ -39,7 +39,7 @@ class Channel(ChannelAbs):
         :param msg: the StringMsg to be published by the channel publisher
         """
 
-        # self.last_pub_time(time.time())
+        self.set_last_pub_time(time.time())
         try:
             self.publisher.publish(msg)
         except Exception as e:
@@ -55,9 +55,9 @@ class Channel(ChannelAbs):
         """
 
         self._logger.info(f"Ch{self.channel_ID} received {msg.data}")
-        # i_stats = time.time() - self.last_pub_time()
+        i_stats = time.time() - self.get_last_pub_time()
         # self._logger.info(f"Stats for msg {msg.data} = {i_stats:.3f}")
-        # self.stats(i_stats)
+        self.set_stats(i_stats)
 
 
 
@@ -165,10 +165,13 @@ class Sender(Ros2Node):
                 i_ros2msg = self._create_ros2msg()
                 self.get_logger().info(f"Ch{i_channel.channel_ID} sends: {i_ros2msg.data}")                
                 executor.submit(i_channel.publish_message, i_ros2msg)
-
-        if self._out_file != '':
+        
+        print("End execution")
+        print("Saving statistics")
+        try:            
             self._save_statistics()
-
+        except Exception as e:
+            self.get_logger().error(f"Unable to save statistics: {e}")
 
     def _activation_callback(self):
         r"""
@@ -196,9 +199,9 @@ class Sender(Ros2Node):
         Helper method to save statistics regarding the time elapsed between the 
         sending and the receiving of a message between Sender and Receiver nodes
         """
-        data = np.vstack([np.array(ch.get_stats()).transpose() for ch in self.channels_list]) # get data from each channel
+        data = np.vstack([np.array(ch.get_stats()).transpose() for ch in self._channels_list]) # get data from each channel
         if data != []:
-            self.get_logger().info("Saving results in {}...".format(self.out_file))
+            self.get_logger().info("Saving results in {}...".format(self._out_file))
             np.savetxt(self.out_file, data.transpose(), delimiter="\t")
             self.get_logger().info("Results saved!")
         else:
@@ -240,7 +243,7 @@ def args_init():
     parser.add_argument("-i", "--iterations", dest='iterations', required=True, type=int, help="Number of iterations to perform")
     parser.add_argument("-a", "--activation-delay", dest='activation_delay', required=False, default=1, type=int, help="Time after which the node starts its execution")
     parser.add_argument("-p", "--publishing-delay", dest='publishing_delay', required=False, default=0, type=int, help="Time after which the node publish another message")
-    parser.add_argument("-o", "--output", dest='output', required=False, default='', help="File used to collect statistics")
+    parser.add_argument("-o", "--output", dest='output', required=False, default='', type=str, help="File used to collect statistics")
     return parser.parse_args()
 
 

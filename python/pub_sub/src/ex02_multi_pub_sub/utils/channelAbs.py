@@ -39,20 +39,17 @@ class ChannelAbs(ABC):
     def output_topic(self):
         return self._out_topic
 
-    @property
-    def last_pub_time(self):
+    def get_last_pub_time(self):
         return self._pub_tic
 
-    @last_pub_time.setter
-    def last_pub_time(self, pub_time):
+    
+    def set_last_pub_time(self, pub_time):
         self._pub_tic = pub_time
 
-    @property
-    def stats(self):
+    def get_stats(self):
         return self._stats
 
-    @stats.setter
-    def stats(self, new_stats):
+    def set_stats(self, new_stats):
         self._stats.append(new_stats)
 
     @abstractmethod
