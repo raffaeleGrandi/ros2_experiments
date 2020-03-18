@@ -1,5 +1,6 @@
 import argparse
 import time
+from threading import Thread
 from utils.channelAbs import ChannelAbs
 from utils.constants import Constants
 
@@ -29,8 +30,10 @@ class Channel(ChannelAbs):
         by the create_channel procedure.
         """
 
-        if not (self.publisher is None):
+        try:
             self.publisher.publish(msg)
+        except Exception as e:
+            self._logger.error(f"Ch{self.channel_ID} unable to publish")
 
 
     def channel_callback(self, msg):
@@ -40,7 +43,8 @@ class Channel(ChannelAbs):
         When a message is received by the Sender node it is suddenly sent back.
         :param msg: the StringMsg received by the channel's subscriber
         """
-        self._logger.info(f"Channel [{self.channel_ID}] received {msg.data}")
+        self._logger.info(f"Ch{self.channel_ID} received {msg.data}")
+        self._logger.info(f"Ch{self.channel_ID} sends: {msg.data}")  
         self.publish_message(msg)
 
 
@@ -86,12 +90,13 @@ class Receiver(Ros2Node):
 
     def _create_channel(self, ch_id):
         r"""
-        The function is used to create a single Channel entity with the publisher,
-        the subscriber and the related topics.
+        The function is used to create a single Channel entity with a publisher,
+        a subscriber and the their related topics.
         NB: input topic and output topic must be the same of the Sender node but
         in inverted order.
         :param ch_id: channel identifier
         """
+
         receiver_in_topic =  f"{Constants.Comms.SENDER_OUTPUT_TOPIC_TAG}_ch{ch_id}"
         receiver_out_topic = f"{Constants.Comms.SENDER_INPUT_TOPIC_TAG}_ch{ch_id}"
 
@@ -112,30 +117,62 @@ class Receiver(Ros2Node):
         self._channels_list.append(channel)
 
 
-    def explicit_destroy(self):
-        time.sleep(self.destroy_delay)
-        for i_ch in self.channels_list:
-            self.destroy_publisher(i_ch.get_publisher())
-            self.destroy_subscription(i_ch.get_subscriber())
-        self.destroy_node()
-
-    #----->  CALLBACKS
-
-    '''
-    The callback is related to the activation_timer
-    '''
-    def activation_callback(self):
-        # check if executor is assigned
+    def _activation_callback(self):
+        r"""
+        In order to wait the correct deployment of all the ROS resources invoked, 
+        a proper 'activation_timer' is created during the init phase of the Receiver node.
+        This method gives just the confirmation of the correct start of the execution.
+        """
+        # check if ROS2 executor is assigned
         if self.executor is None:
-            self.get_logger().info("Node {} not ready, executor absent. Waiting for {}".format(self.get_name(), self.activation_delay))
+            self.get_logger().info(f"Node {self.get_name()} not ready, executor absent. " \
+                "Waiting for {self._activation_delay}.")
         else:
-            self.destroy_timer(self.activation_timer)
-            self.get_logger().info("Node {} ready, execution starts".format(self.get_name()))
+            self.destroy_timer(self._activation_timer)
+            self.get_logger().info(f"Node {self.get_name()} ready, execution starts")
 
+
+    def _sys_callback(self, sys_msg):
+        r"""
+        Callback for receiving the STOP message. 
+        When he STOP message is sent by the Sender node the callback launches a 
+        thread for the explicit destruction of the node e the ROS exiting
+        """
+        if sys_msg.data == Constants.Comms.STOP_MESSAGE:
+            self._logger.info("Received STOP message. Exiting node...")
+            destroy_thread = Thread(target=self._explicit_destroy)
+            destroy_thread.start()
+
+
+    def _explicit_destroy(self):
+        r"""
+        The function is used to explicitely destroy all the structures of the node,
+        since sometimes the automatic procedure does not work and some structures remain pending.
+        The function waits for a destroy delay before executing.
+        """
+        time.sleep(self._destroy_delay)
+        print('Destroying channels')
+        for i_ch in self._channels_list:
+            try:
+                self.destroy_publisher(i_ch.publisher)
+                self.destroy_subscription(i_ch.subscriber)
+            except Exception as e:
+                    print(f"Unable to destroy channel {i_ch.channed_ID}")
+        print("Destroying system subscriber")
+        self.destroy_subscription(self._sys_sub)
+        print('Destroying node')
+        try:
+            self.destroy_node()
+        except Exception as e:
+            print("Unable to destroy node")                
+        rclpy.shutdown()
 
 
 def args_init():
-    parser = argparse.ArgumentParser(description="TEST 02 receiver node")
+    r"""
+    Helper method to parse the input arguments
+    """
+    parser = argparse.ArgumentParser(description="Receiver node of a multi publisher/subscriber structure")
     parser.add_argument("-n", "--name", dest='name', required=True, type=str, help="Name to assign to the node (must be unique in context)")
     parser.add_argument("-c", "--num_channels", dest='ch_num', required=False, default=1, type=int, help="Number of pub/sub couples to create")
     parser.add_argument("-a", "--activation-delay", dest='activation_delay', required=False, default=1, type=int, help="Time after which the node starts its execution")
@@ -150,18 +187,19 @@ def main(args = None):
     with the parameters given by the user at command line and finally started 
     (spinned)
     """
+
     parsed_args = args_init()
     rclpy.init(args = args)
-    executor = MultiThreadedExecutor() # it is necessary to execute the ROS callbacks
+    ros2_executor = MultiThreadedExecutor() # it is necessary to execute the ROS callbacks
 
     node = Receiver(parsed_args.name,
-                    parsed_args.ch_size,
+                    parsed_args.ch_num,
                     parsed_args.activation_delay)
 
-    rclpy.spin(node, executor=executor)
-
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node, executor=ros2_executor)
+    except Exception as e:
+        print("Exiting ROS")
 
 
 if __name__ == "__main__":

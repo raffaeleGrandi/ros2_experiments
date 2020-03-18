@@ -6,7 +6,8 @@ class ChannelAbs(ABC):
         self._channel_ID = ch_id
         self._publisher = None
         self._subscriber = None
-        self._topics = {'in':in_topic_name,'out':out_topic_name}
+        self._in_topic = in_topic_name
+        self._out_topic = out_topic_name
         self._pub_tic = 0.0
         self._stats = []
 
@@ -32,11 +33,11 @@ class ChannelAbs(ABC):
 
     @property
     def input_topic(self):
-        return self._topics['in']
+        return self._in_topic
 
     @property
     def output_topic(self):
-        return self._topics['out']
+        return self._out_topic
 
     @property
     def last_pub_time(self):

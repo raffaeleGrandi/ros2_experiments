@@ -39,9 +39,11 @@ class Channel(ChannelAbs):
         :param msg: the StringMsg to be published by the channel publisher
         """
 
-        if not (self.publisher is None):
-            self.last_pub_time(time.time())
+        # self.last_pub_time(time.time())
+        try:
             self.publisher.publish(msg)
+        except Exception as e:
+            self._logger.error(f"Ch{self.channel_ID} unable to publish")
 
 
     def channel_callback(self, msg):
@@ -52,10 +54,10 @@ class Channel(ChannelAbs):
         :param msg: the StringMsg received by the channel's subscriber
         """
 
-        self._logger.info(f"Channel [{self.channel_ID}] received {msg.data}")
-        i_stats = time.time() - self.last_pub_time()
-        self._logger.info(f"Stats for msg {msg.data} = {i_stats:.3f}")
-        self.stats(i_stats)
+        self._logger.info(f"Ch{self.channel_ID} received {msg.data}")
+        # i_stats = time.time() - self.last_pub_time()
+        # self._logger.info(f"Stats for msg {msg.data} = {i_stats:.3f}")
+        # self.stats(i_stats)
 
 
 
@@ -70,8 +72,8 @@ class Sender(Ros2Node):
     a list of Channels, created and populated by the initialization method.
     """
 
-    def __init__(self, name, num_channels, msg_size, max_num_iter, publishing_delay, 
-                    activation_delay, out_file=''):
+    def __init__(self, name, num_channels, msg_size, max_num_iter,
+                    activation_delay, publishing_delay, out_file=''):
         r"""
         The function is devoted to the initialization of the node and the 
         creation of the communication channels.
@@ -91,10 +93,10 @@ class Sender(Ros2Node):
         super().__init__(node_name=name)        
         self._num_channels = num_channels
         self._msg_size = msg_size if (0 < msg_size < Constants.Comms.MAX_MESSAGE_SIZE) else Constants.Comms.MAX_MESSAGE_SIZE
-        self._max_num_iter = max_num_iter
-        self._pub_delay = publishing_delay
+        self._max_num_iter = max_num_iter        
         self._activation_delay = activation_delay
         self._activation_timer = self.create_timer(self._activation_delay, self._activation_callback) # it is used to activate the execution of the node
+        self._pub_delay = publishing_delay
         self._destroy_delay = Constants.System.DESTROY_DELAY 
         self._qos_depth = Constants.System.SYSTEM_DEFAULT_QOS
         self._out_file = out_file
@@ -108,8 +110,8 @@ class Sender(Ros2Node):
 
     def _create_channel(self, ch_id):
         r"""
-        The function is used to create a single Channel entity with the publisher,
-        the subscriber and the related topics.
+        The function is used to create a single Channel entity with a publisher,
+        a subscriber and the their related topics.
         :param ch_id: channel identifier
         """
         sender_in_topic = f"{Constants.Comms.SENDER_INPUT_TOPIC_TAG}_ch{ch_id}"
@@ -146,10 +148,10 @@ class Sender(Ros2Node):
     def _execute(self):
         r"""
         The method is the core function for the node execution.
-        It is launched by the activation_callback.
+        It is launched by the activation_callback and starts to send messages.
         A ThreadPoolExecutor is created to manage the channel publishing function.
         For each iteration a new random message is generated and a ThreadPoolExecutor 
-        execute the publish_message function of each channel in order to send 
+        executes the publish_message method of each channel in order to send 
         the message.
         """
 
@@ -159,11 +161,10 @@ class Sender(Ros2Node):
         for i_iter in range(self._max_num_iter):
             print(f"\nRunning iteration # {i_iter}")
             for i_channel in self._channels_list:
+                time.sleep(self._pub_delay)
                 i_ros2msg = self._create_ros2msg()
-                self.get_logger().info(
-                    f"Iteration {i_iter} : channel {i_channel.channel_ID} " \
-                    f"is publishing message: {i_ros2msg.data}")
-                executor.submit(i_channel.publish_message, i_ros2msg, self._pub_delay)
+                self.get_logger().info(f"Ch{i_channel.channel_ID} sends: {i_ros2msg.data}")                
+                executor.submit(i_channel.publish_message, i_ros2msg)
 
         if self._out_file != '':
             self._save_statistics()
@@ -173,16 +174,14 @@ class Sender(Ros2Node):
         r"""
         In order to wait the correct deployment of all the ROS resources invoked, 
         a proper 'activation_timer' is created during the init phase of the Sender node.
-        The method is the callback connected with the activation_timer and manages
+        This method is the callback connected with the activation_timer and manages
         the 'living phase' of the node
         """
         # check if ROS2 executor is assigned
         if self.executor is None:
-            self.get_logger().info(f"Node {self.get_name()} not ready, executor absent. \
-                Waiting for {self._activation_delay}.")
-        else:
-            print(f"Node activation is delayed by {self._activation_delay}")
-            time.sleep(self._activation_delay)
+            self.get_logger().info(f"Node {self.get_name()} not ready, executor absent. " \
+                "Waiting for {self._activation_delay}.")
+        else:            
             self.get_logger().info(f"Node {self.get_name()} ready, execution starts...")
             self.destroy_timer(self._activation_timer)            
             self._execute()
@@ -191,7 +190,6 @@ class Sender(Ros2Node):
             print("Activation callback ENDs")
             self._explicit_destroy()
             
-
 
     def _save_statistics(self):
         r"""
@@ -213,7 +211,7 @@ class Sender(Ros2Node):
             since sometimes the automatic procedure does not work and some structures remain pending.
             The function waits for a destroy delay before executing.
             """
-            #time.sleep(self._destroy_delay)
+            time.sleep(self._destroy_delay)
             print('Destroying channels')
             for i_ch in self._channels_list:
                 try:
@@ -235,7 +233,7 @@ def args_init():
     r"""
     Helper method to parse the input arguments
     """
-    parser = argparse.ArgumentParser(description="A multi publisher/subscriber example")
+    parser = argparse.ArgumentParser(description="Sender node of multi a publisher/subscriber structure")
     parser.add_argument("-n", "--name", dest='name', required=True, type=str, help="Name to assign to the node (must be unique in context)")
     parser.add_argument("-c", "--num-channels", dest='ch_num', required=False, default=1, type=int, help="Number of pub/sub couples to create")
     parser.add_argument("-s", "--message-size", dest='msg_size', required=False, default=4, type=int, help="Size of the message to publish in bytes")

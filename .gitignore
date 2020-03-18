@@ -12,3 +12,9 @@
 python/clean.sh
 
 .vscode/
+
+python/pub_sub/build/
+
+python/pub_sub/install/
+
+python/pub_sub/log/
