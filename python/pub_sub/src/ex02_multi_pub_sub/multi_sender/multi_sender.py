@@ -1,7 +1,7 @@
 import argparse
 import time
 import threading
-import numpy as np
+import pickle
 from concurrent.futures import ThreadPoolExecutor
 
 from utils.channelAbs import ChannelAbs
@@ -39,7 +39,7 @@ class Channel(ChannelAbs):
         :param msg: the StringMsg to be published by the channel publisher
         """
 
-        # self.last_pub_time(time.time())
+        self.set_last_pub_time(time.time())
         try:
             self.publisher.publish(msg)
         except Exception as e:
@@ -55,9 +55,9 @@ class Channel(ChannelAbs):
         """
 
         self._logger.info(f"Ch{self.channel_ID} received {msg.data}")
-        # i_stats = time.time() - self.last_pub_time()
+        i_stats = time.time() - self.get_last_pub_time()
         # self._logger.info(f"Stats for msg {msg.data} = {i_stats:.3f}")
-        # self.stats(i_stats)
+        self.set_stats(i_stats)
 
 
 
@@ -114,6 +114,7 @@ class Sender(Ros2Node):
         a subscriber and the their related topics.
         :param ch_id: channel identifier
         """
+
         sender_in_topic = f"{Constants.Comms.SENDER_INPUT_TOPIC_TAG}_ch{ch_id}"
         sender_out_topic = f"{Constants.Comms.SENDER_OUTPUT_TOPIC_TAG}_ch{ch_id}"
 
@@ -165,10 +166,15 @@ class Sender(Ros2Node):
                 i_ros2msg = self._create_ros2msg()
                 self.get_logger().info(f"Ch{i_channel.channel_ID} sends: {i_ros2msg.data}")                
                 executor.submit(i_channel.publish_message, i_ros2msg)
-
+        
+        print("Execution ENDs")
+        time.sleep(self._destroy_delay)
         if self._out_file != '':
-            self._save_statistics()
-
+            print("Saving statistics")
+            try:            
+                self._save_statistics()
+            except Exception as e:
+                self.get_logger().error(f"Unable to save statistics: {e}")
 
     def _activation_callback(self):
         r"""
@@ -185,7 +191,7 @@ class Sender(Ros2Node):
             self.get_logger().info(f"Node {self.get_name()} ready, execution starts...")
             self.destroy_timer(self._activation_timer)            
             self._execute()
-            print("Execution ENDs, sending STOP message")
+            print("Sending STOP message")
             self._sys_pub.publish(StringMsg(data=Constants.Comms.STOP_MESSAGE))
             print("Activation callback ENDs")
             self._explicit_destroy()
@@ -194,15 +200,12 @@ class Sender(Ros2Node):
     def _save_statistics(self):
         r"""
         Helper method to save statistics regarding the time elapsed between the 
-        sending and the receiving of a message between Sender and Receiver nodes
-        """
-        data = np.vstack([np.array(ch.get_stats()).transpose() for ch in self.channels_list]) # get data from each channel
-        if data != []:
-            self.get_logger().info("Saving results in {}...".format(self.out_file))
-            np.savetxt(self.out_file, data.transpose(), delimiter="\t")
-            self.get_logger().info("Results saved!")
-        else:
-            self.get_logger().info("No stats available!")
+        sending and the receiving of a message between Sender and Receiver nodes.
+        The statistics are saved as pickle file which name is given by the user.
+        """        
+
+        data = {ch.channel_ID: ch.get_stats() for ch in self._channels_list}
+        pickle.dump( data, open( self._out_file, "wb" ) )
 
 
     def _explicit_destroy(self):
@@ -211,6 +214,7 @@ class Sender(Ros2Node):
             since sometimes the automatic procedure does not work and some structures remain pending.
             The function waits for a destroy delay before executing.
             """
+
             time.sleep(self._destroy_delay)
             print('Destroying channels')
             for i_ch in self._channels_list:
@@ -239,8 +243,8 @@ def args_init():
     parser.add_argument("-s", "--message-size", dest='msg_size', required=False, default=4, type=int, help="Size of the message to publish in bytes")
     parser.add_argument("-i", "--iterations", dest='iterations', required=True, type=int, help="Number of iterations to perform")
     parser.add_argument("-a", "--activation-delay", dest='activation_delay', required=False, default=1, type=int, help="Time after which the node starts its execution")
-    parser.add_argument("-p", "--publishing-delay", dest='publishing_delay', required=False, default=0, type=int, help="Time after which the node publish another message")
-    parser.add_argument("-o", "--output", dest='output', required=False, default='', help="File used to collect statistics")
+    parser.add_argument("-p", "--publishing-delay", dest='publishing_delay', required=False, default=0, type=float, help="Time after which the node publish another message")
+    parser.add_argument("-o", "--output", dest='output', required=False, default='', type=str, help="File used to collect statistics")
     return parser.parse_args()
 
 
