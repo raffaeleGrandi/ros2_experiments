@@ -14,3 +14,11 @@ python/pub_sub/build/
 python/pub_sub/install/
 python/pub_sub/log/
 python/pub_sub/src/#stack/
+
+python/#misc_tests/build/
+
+python/#misc_tests/install/
+
+python/#misc_tests/log/
+
+python/#misc_tests/clean.sh
