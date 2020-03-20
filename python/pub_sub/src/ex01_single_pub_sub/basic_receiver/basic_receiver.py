@@ -1,25 +1,38 @@
 import rclpy
 from rclpy.node import Node as Ros2Node
 from rclpy.callback_groups import ReentrantCallbackGroup as Reentrant # ReentrantCallbackGroup allows callbacks to be executed in parallel without restriction.
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import SingleThreadedExecutor
 from std_msgs.msg import String as StringMsg
 
 import argparse
 
+STOP_MESSAGE = '!STOP!'
 
 class Receiver(Ros2Node):
 
-    def __init__(self, name, topic):
+    def __init__(self, name, topic, exit_event):
         super().__init__(node_name=name)
         self._topic = topic
         self._message_type = StringMsg
-        self.create_subscription(self._message_type, self._topic, 
-            self._callback, callback_group=Reentrant(), qos_profile=0)
-        self.get_logger().info(f"Receiver {self.get_name()} initialized on topic {self._topic}")
+        self._sub = self.create_subscription(self._message_type, self._topic, 
+            self._callback, callback_group=Reentrant(), qos_profile=0)        
+        self._exit_event = exit_event
+        self._msgs_counter = 0
+
+        self.get_logger().info(f"Receiver initialized on topic {self._topic}")
 
 
     def _callback(self, received_msg):
-        self.get_logger().info(f"{self.get_name()} received message: {received_msg.data}")
+        received_data = received_msg.data        
+        
+        if received_data != STOP_MESSAGE:
+            self._msgs_counter += 1
+            self.get_logger().info(f"received message #{self._msgs_counter}: {received_data}")
+        else:
+            self.get_logger().info(f"received STOP message: {received_data}")
+            self.get_logger().info("Exiting...")
+            self.destroy_subscription(self._sub)
+            self._exit_event.set_result(None)
 
 
 def parse_init_args():
@@ -34,11 +47,15 @@ def main():
     parsed_args = parse_init_args()
 
     rclpy.init()
-    executor = MultiThreadedExecutor() # it is necessary to execute the ROS callbacks
-    
-    receiver_node = Receiver(parsed_args.name, parsed_args.topic)
+    executor = SingleThreadedExecutor() # executes the ROS callbacks
 
-    rclpy.spin(receiver_node, executor=executor)
+    exit_event = rclpy.Future()
+    
+    receiver_node = Receiver(parsed_args.name, parsed_args.topic, exit_event)
+
+    rclpy.spin_until_future_complete(receiver_node, 
+                                     exit_event, 
+                                     executor=executor)
 
     receiver_node.destroy_node()
     rclpy.shutdown()
