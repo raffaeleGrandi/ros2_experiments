@@ -6,6 +6,7 @@ from std_msgs.msg import String as StringMsg
 
 import random
 import argparse
+import time
 
 STOP_MESSAGE = '!STOP!'
 
@@ -33,6 +34,7 @@ class Sender(Ros2Node):
         else:
             self.get_logger().info("Exiting... max num iters reached")
             self._publisher.publish(StringMsg(data=STOP_MESSAGE))
+            time.sleep(0.5)
             self.destroy_timer(self._pub_timer)
             self.destroy_publisher(self._publisher)
             self._exit_event.set_result(None)
