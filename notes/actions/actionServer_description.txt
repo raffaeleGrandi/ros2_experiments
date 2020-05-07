@@ -1,0 +1,153 @@
+ActionServer - descrizione del funzionamento:
+
+Un ActionServer ha 4 tipi di callback che vengono eseguite:
+
+1 - goal_callback(goal_request)
+2 - handle_accepted_callback(goal_handle)
+3 - execute_callback(goal_handle)
+4 - cancel_callback(goal_handle)
+
+
+Quando un client invia una 'request' al server, ROS2 chiama la 'goal_callback' passandole la 'request' inviata dal client. La 'request' è la parte Request dell'action_type che si può ottenere tramite action_type.Request().
+
+1-
+La 'goal_callback' deve decidere se accettare o respingere l'esecuzione del goal, ritornando il valore GoalResponse.ACCEPT o GoalResponse.REJECT
+Nel secondo caso la procedura finisce in attesa di un altra 'goal_request'.
+Nel primo caso invece ROS2 chiama la 'handle_accepted_callback', passandole il 'goal_handle' che è un particolare oggetto python che wrappa il riferimento ad un oggetto goal di cui non ci interessa la struttura. Ci si interfaccia sempre e solo con il goal_handle.
+
+2-
+La funzione 'handle_accepted_callback' può fare determinate operazioni in funzione dello status del server ma in ogni caso per proseguire è la funzione stessa che deve chiamare la funzione goal_handle.execute() del goal_handle wrapper che a sua volta innesca l'esecuzione della execute_callback del server.
+Si può vedere nel codice come la versione di defautl della 'handle_accepted_callback' del server non faccia nulla se non chiamare la execute callback del goal_handle 
+[..code-block::
+
+def default_handle_accepted_callback(goal_handle):
+    """Execute the goal."""
+    goal_handle.execute()
+]
+
+3-
+La funzione 'execute_callback' è la funzione che propriamente esegue le operazioni richieste dalla request (e contenuta nel goal_handle stesso).
+All'interno vengono operate le vere e proprie operazioni per fornire il servizio richiesto. Viene gestito il risultato delle operazioni e al termine viene restituito come paramentro di ritorno, popolando action_type.Result()
+Sempre all'interno della funzione 'execute_callback' vi deve gestire il feedback della action (action_type.Feedback()) tramite il goal_handle.
+Il feedback viene inviato indietro al client che ha richiesto il servizio tramite la chiamata:
+- goal_handle.publish_feedback(feedback_msg) dove appunto il feedback_msg = action_type.Feedback().
+
+Durante l'esecuzione delle operazioni può succedere che dal client avvenga una richiesta di cancellazione del goal. Se la cancellazione del goal viene accettata (all'interno della cancel_callback, vedi dopo) il goal_handle.is_cancel_requested diventa True, situazione che deve essere gestita all'interno della 'execute_callback' per eseguire le dovute operazioni di cancellazione delle operazioni. Come cambiano gli stati del goal in funzione delle richieste del client è descritto nella sezione relativa al goal_handler.
+
+Sempre all'interno dell'execute viene gestito anche lo status di abort, canceled e di succeed del goal. Negli ultimi due casi è all'interno di execute_callback che di solito viene cambiato lo stato del goal_handle.
+La situazione di abort invece viene innescata dall'esterno e cambia lo stato del goal_handle da executing in abort.
+
+La funzione ritorna in ogni caso il result = action_type.Result()
+
+4-
+La funzione di cancel_callback viene chiamata da ROS2 nel momento in cui viene ricevuta una richiesta di cancellazione da parte del client. La funzione può eseguire determinate operazioni di controllo e deve ritornare sempre un risultato di dipo Response che può essere CancelResponse.ACCEPT, nel caso la cancellazione sia accettata dal server, oppure CancelResponse.REJECT in caso contrario.
+
+
+Goal_handle
+
+Il goal_handler è un oggetto che viene fornito da ROS2 per la gestione del goal. E' sempre lo stesso, in quanto implementa il pattern Singleton, in questo modo può passare da una funzione all'altra senza problema. Fornisce diverse funzionalità e proprietà che aiutano la gestione del goal e il ritorno dei paramentri di feedback. Di seguito la classe del ActionServerGoalHandlerWrapper con relativa documentazione.
+
+
+
+class ActionServerGoalHandlerWrapper:
+    r"""
+    The class is implemented to wrap the ROS2 "server goal handle object" managed by the ROS2 Action Server when a goal
+    is accepted. More information about the goal handle object can be found on the official ROS2 documentation.
+
+    :param goal_handle: the goal handle object received by the system when a goal is accepted
+    """
+
+    def __init__(self, goal_handle):
+        self._goal_handle = goal_handle
+
+    @property
+    def goal_request(self):
+        r"""
+        Returns the ROS2 message related to the goal request. Action_type.Request()
+        The same provided to the goal_callback as parameter.
+        """
+        return self._goal_handle.request
+
+    @property
+    def goal_id(self):
+        r"""
+        Provides the UUID of the goal
+        """
+        return self._goal_handle.goal_id
+
+    def is_active(self):
+        r"""
+        Provides the active status of the goal. When the goal is accepted and starts the execution of the goal,
+        the goal is active and its status is executing.
+
+        :return: True if the goal is active, False otherwise (goal is none e.g. after a destroy)
+        """
+        return self._goal_handle.is_active
+
+    def is_cancel_requested(self):
+        r"""
+        Provides the "Canceling GoalStatus". Used to check if the client has requested the goal canceling.
+
+        :return: True if the goal canceling request have been performed by the client, False otherwise
+        """
+        return self._goal_handle.is_cancel_requested
+
+    @property
+    def status(self):
+        r"""
+        Returns the GoalStatus:
+            STATUS_UNKNOWN   = 0
+            STATUS_ACCEPTED  = 1
+            STATUS_EXECUTING = 2
+            STATUS_CANCELING = 3
+            STATUS_SUCCEEDED = 4
+            STATUS_CANCELED  = 5
+            STATUS_ABORTED   = 6
+        """
+        return self._goal_handle.status
+
+    def execute(self):
+        r"""
+        The method performs the callback ActionServerItem.execute_callback. Normally the execution of the
+        execute_callback is performed by the handle_accepted_callback of the server but it is possible to
+        perform the execution even from this entry-point
+        """
+        return self._goal_handle.execute()
+
+    def publish_feedback(self, feedback_msg):
+        r"""
+        Publishes the feedback of the action during the goal handling.
+
+        :param feedback_msg: service_type.Feedback() message
+        """
+        self._goal_handle.publish_feedback(feedback_msg)
+
+    def succeed(self):
+        r"""
+        Updates the goal_handle state to GoalEvent.SUCCEED
+        """
+        return self._goal_handle.succeed()
+
+    def abort(self):
+        r"""
+        Updates the goal_handle state to GoalEvent.ABORT
+        """
+        return self._goal_handle.abort()
+
+    def canceled(self):
+        r"""
+        Updates the goal_handle state to GoalEvent.CANCELED
+        """
+        return self._goal_handle.canceled()
+
+    def destroy(self):
+        r"""
+        Destroy the Goal Handler
+        """
+        self._goal_handle.destroy()
+        self._goal_handle = None
+
+
+
+
+
