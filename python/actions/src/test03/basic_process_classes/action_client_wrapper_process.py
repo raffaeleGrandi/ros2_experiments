@@ -1,20 +1,23 @@
 from example_interfaces.action import Fibonacci
 from action_msgs.msg import GoalStatus
 
+import rclpy
 from rclpy.action import ActionClient
+from rclpy.executors import MultiThreadedExecutor
 
-import threading
+import multiprocessing
 import time
 
 
-class ActionClientWrapper(threading.Thread):        
+class ActionClientWrapperProcess(multiprocessing.Process):        
 
-    def __init__(self, node, exit_future):
-        threading.Thread.__init__(self)
-        self._node = node
+    def __init__(self, exit_future):
+        multiprocessing.Process.__init__(self)
+        self._node = rclpy.create_node('minimal_action_client')
+        self._executor = MultiThreadedExecutor()
         self._exit_future = exit_future
 
-        self._action_client = ActionClient(node, Fibonacci, 'fibonacci')      
+        self._action_client = ActionClient(self._node, Fibonacci, 'fibonacci')      
 
     def send_goal(self):
         self._node.get_logger().info('Waiting for action server...')
@@ -59,15 +62,19 @@ class ActionClientWrapper(threading.Thread):
 
         self._exit_future.set_result(None)    
     
-    def destroy(self):
-        self._action_client.destroy()
-        
+            
     def run(self):
         print("Client is entering...")
-        self.send_goal()
 
         while not self._exit_future.done():
-            time.sleep(1)
-            print("Client is running...")
+            rclpy.spin_until_future_complete(
+                self._node, 
+                self._exit_future,
+                executor=self._executor,
+                timeout_sec=1)
+
+        self._action_client.destroy()
+        self._executor.shutdown()
+        self._node.destroy_node()
         
         print('Client is exiting...')

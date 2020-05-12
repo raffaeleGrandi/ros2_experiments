@@ -3,19 +3,21 @@ from example_interfaces.action import Fibonacci
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 
-import threading
+import multiprocessing
 import time
 
-class ActionServerWrapper(threading.Thread):
+class ActionServerWrapperProcess(multiprocessing.Process):
 
-    def __init__(self, node, exit_future):
-        threading.Thread.__init__(self)
-        self._node = node
+    def __init__(self, exit_future):
+        multiprocessing.Process.__init__(self)
+        self._node = rclpy.create_node('minimal_action_server')
+        self._executor = MultiThreadedExecutor()
         self._exit_future = exit_future
         
         self._action_server = ActionServer(
-            node,
+            self._node,
             Fibonacci,
             'fibonacci',
             execute_callback=self.execute_callback,
@@ -70,15 +72,20 @@ class ActionServerWrapper(threading.Thread):
 
         return result
 
-    def destroy(self):
-        self._action_server.destroy()
-
 
     def run(self):
         print("Server is entering...")
-        
+
         while not self._exit_future.done():
-            time.sleep(1)
-            print("Server is running...")
-        
+            rclpy.spin_until_future_complete(
+                self._node, 
+                self._exit_future,
+                executor=self._executor,
+                timeout_sec=1)
+
+
+        self._action_server.destroy()
+        self._executor.shutdown()
+        self._node.destroy_node()        
+       
         print('Server is exiting...')

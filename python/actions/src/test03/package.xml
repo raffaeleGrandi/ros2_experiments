@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format2.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="2">
+  <name>mini_action_multiple_nodes_processes</name>
+  <version>0.0.1</version>
+  <description>Basic example of minimal action client and server processes communicating on different nodes</description>
+  <maintainer email="raffaele.grandi@gmail.com">RaffaeleGrandi</maintainer>
+  <license>GPL</license>
+  
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

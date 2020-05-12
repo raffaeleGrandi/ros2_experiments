@@ -5,8 +5,8 @@ from rclpy.node import Node
 import threading
 import time
 
-from basic_classes.action_client_wrapper import ActionClientWrapper
-from basic_classes.action_server_wrapper import ActionServerWrapper
+from basic_thread_classes.action_client_wrapper_thread import ActionClientWrapperThread
+from basic_thread_classes.action_server_wrapper_thread import ActionServerWrapperThread
    
 
 def main():
@@ -18,13 +18,13 @@ def main():
     exit_future = rclpy.Future()
     
 
-    asw = ActionServerWrapper(node, exit_future)
+    asw = ActionServerWrapperThread(node, exit_future)
     asw.start()
 
     time.sleep(0.5)  # without this instruction this error is thrown at the end of the program: 
     # PyCapsule_GetPointer called with invalid PyCapsule object #3
 
-    acw = ActionClientWrapper(node, exit_future)
+    acw = ActionClientWrapperThread(node, exit_future)
     acw.start()
 
     while not exit_future.done():
