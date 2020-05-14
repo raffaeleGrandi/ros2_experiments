@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node as Ros2Node
 from rclpy.callback_groups import ReentrantCallbackGroup as Reentrant # ReentrantCallbackGroup allows callbacks to be executed in parallel without restriction.
-from rclpy.executors import SingleThreadedExecutor
+from rclpy.executors import SingleThreadedExecutor, MultiThreadedExecutor
 from std_msgs.msg import String as StringMsg
 
 import argparse
@@ -48,6 +48,7 @@ def main():
 
     rclpy.init()
     executor = SingleThreadedExecutor() # executes the ROS callbacks
+    # executor = MultiThreadedExecutor() # executes the ROS callbacks
 
     exit_event = rclpy.Future()
     
